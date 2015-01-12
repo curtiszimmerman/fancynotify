@@ -1,22 +1,26 @@
 {
-  "name": "fancynotify",
-  "version": "0.0.1",
-  "description": "fancynotify exposes simple notification functions",
-  "main": "notify.js",
-  "scripts": {
-    "test": "npm test"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/curtiszimmerman/fancynotify.git"
-  },
-  "keywords": [
-    "notification"
-  ],
-  "author": "Curtis Zimmerman <software@curtisz.com> (http://curtisz.com/)",
-  "license": "MIT",
-  "bugs": {
-    "url": "https://github.com/curtiszimmerman/fancynotify/issues"
-  },
-  "homepage": "https://github.com/curtiszimmerman/fancynotify"
+	"name": "fancynotify",
+	"version": "1.0.0",
+	"description": "fancynotify exposes simple notification functions",
+	"main": "notify.js",
+	"scripts": {
+		"test": "mocha"
+	},
+	"devDependencies": {
+		"chai": "1.10.0",
+		"mocha": "2.1.0"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/curtiszimmerman/fancynotify.git"
+	},
+	"keywords": [
+		"notification"
+	],
+	"author": "Curtis Zimmerman <software@curtisz.com> (http://curtisz.com/)",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/curtiszimmerman/fancynotify/issues"
+	},
+	"homepage": "https://github.com/curtiszimmerman/fancynotify"
 }
