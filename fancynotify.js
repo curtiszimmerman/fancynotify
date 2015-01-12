@@ -39,6 +39,24 @@
  *   config.pass - the Twilio account pass
  *
  *   server.name - name of server which is down
+ *
+ * Example:
+ * ========
+ * // uh oh! server down! let's notify via Twilio's API
+ * var body = 'To=' + config.to;
+ * body += '&From=' + config.from;
+ * body += '&Body=Server down (' + server.name + ')';
+ * var length = Buffer.byteLength(encodeURIComponent(body));
+ * var options = {
+ *   headers: {
+ *     'Authorization': 'Basic ' + new Buffer(config.user + ':' + config.pass).toString('base64'),
+ *     'Content-Length': length
+ *   },
+ *   hostname: 'api.twilio.com',
+ *   port: 443,
+ *   path: '/2010-04-01/Accounts/' + config.user + '/Messages.json',
+ *   method: 'POST'
+ * };
  */
 
 module.exports = exports = __fancynotify = (function() {
@@ -47,6 +65,7 @@ module.exports = exports = __fancynotify = (function() {
 	var buffer = require('buffer');
 	var http = require('http');
 	var https = require('https');
+	var qs = require('querystring');
 	var url = require('url');
 
 	/**
@@ -96,71 +115,9 @@ module.exports = exports = __fancynotify = (function() {
 		};
 	})();
 
-	/**
-	 * @function _pubsub
-	 * Exposes pub/sub/unsub pattern utility functions.
-	 * @method flush
-	 * Flush the pubsub cache of all subscriptions.
-	 * @method pub
-	 * Publish an event with arguments.
-	 * @param {string} The event to publish.
-	 * @param {array} Array of arguments to pass to callback.
-	 * @method sub
-	 * Subscribe a callback to an event.
-	 * @param {string} The event topic to subscribe to.
-	 * @param {function} The callback function to fire.
-	 * @method unsub
-	 * Unsubscribe an event handler.
-	 * @param {array} Handler to unsubscribe.
-	 * @param {boolean} Unsubscribe all subscriptions?
-	 */
-	var _pubsub = (function() {
-		var cache = {};
-		function _flush() {
-			cache = {};
-		};
-		function _pub( topic, args, scope ) {
-			if (cache[topic]) {
-				var currentTopic = cache[topic],
-					topicLength = currentTopic.length;
-				for (var i=0; i<topicLength; i++) {
-					currentTopic[i].apply(scope || this, args || []);
-				}
-			}
-			return true;
-		};
-		function _sub( topic, callback ) {
-			if (!cache[topic]) {
-				cache[topic] = [];
-			}
-			cache[topic].push(callback);
-			return [topic, callback];
-		};
-		function _unsub( handle, total ) {
-			var topic = handle[0],
-				cacheLength = cache[topic].length;
-			if (cache[topic]) {
-				for (var i=0; i<cacheLength; i++) {
-					if (cache[topic][i] === handle) {
-						cache[topic].splice(cache[topic][i], 1);
-						if (total) {
-							delete cache[topic];
-						}
-					}
-				}
-			}
-			return true;
-		};
-		return {
-			flush: _flush,
-			pub: _pub,
-			sub: _sub,
-			unsub: _unsub
-		};
-	})();
-
 	var $data = {
 		notify: {
+			cache: [],
 			settings: {
 				defaultIDLength: 8
 			}
@@ -233,75 +190,68 @@ module.exports = exports = __fancynotify = (function() {
 					this.ssl = typeof(config.ssl) !== 'undefined' ? config.ssl : true;
 					this.port = typeof(config.port) !== 'undefined' ? config.port : 443;
 					this.path = typeof(config.path) !== 'undefined' ? config.path : '/';
-					this.method = typeof(config.method) !== 'undefined' ? config.method : 'POST';
 					return this;
 				} else {
 					throw new Error('Must provide configuration data to instantiate Notifier object!');
 				}
 			};
-			Notifier.prototype.config = function( config ) {
-				var reset = function() {
-					this.auth = false;
-					this.api = {};
-					this.host = false;
-					this.ssl = true;
-
+			Notifier.prototype.call = function( data, callback ) {
+				/*
+				querystring.stringify({
+					"To": encodeURIComponent("+18085551212"),
+					"From": encodeURIComponent("+15125551212"),
+					"Body": encodeURIComponent("Server down ("+server.name+")")
+				});
+				*/
+				// our calling library depends on our target api
+				var call = this.ssl ? https : http;
+				var method = (this.method === 'GET') ? 'GET' : 'POST';
+				var options = {
+					host: this.host
 				};
-				var set = function( key, value ) {
-
+				options.protocol = this.ssl ? 'https:' : 'http:';
+				if (this.path !== null) options.path = this.path;
+				if (this.port !== null) options.port = this.port;
+				if (this.auth !== null) options.auth = this.auth;
+				if (method === 'GET') {
+					options.method = 'GET';
+					options.path += qs.stringify(data);
+				} else {
+					options.method = 'POST';
+					options.headers = {
+						'Content-Length': Buffer.byteLength(encodeURIComponent(qs.stringify(data)))
+					};
 				};
-				return {
-					flush: flush,
-					set: set
-				};
+				var req = call.request(options, function(res) {
+					if (res.statusCode === 200) {
+						_log.info('Server down: Admin notified!');
+					} else {
+						_log.warn('Received strange response from API: ' + res.statusCode);
+					}
+					return typeof(callback) === 'function' && callback(null, res.statusCode, res.responseText);
+				});
+				req.on('error', function(e) {
+					throw new Error('Error sending request: ' + e.message);
+				});
+				if (method === 'POST') req.write(encodeURIComponent(qs.stringify(body)));
+				return this;
 			};
-			Notifier.prototype.get = function( data ) {
-				return false;
+			Notifier.prototype.get = function( data, callback ) {
+				this.method = 'GET';
+				return this.call(data, callback);
 			};
-			Notifier.prototype.post = function( data ) {
-				return false;
+			Notifier.prototype.post = function( data, callback ) {
+				this.method = 'POST';
+				return this.call(data, callback);
 			};
-			/*
-var notifiers.push(new)
-			*/
 			return Notifier;
 		})()
 	};
 
 	var $func = {
-		config: function( options ) {
-			if (typeof(options) !== 'object') return false;
-			if (typeof(options.host))
-			return false;
-		},
-		connect: function( config, server ) {
-			// uh oh! server down! let's notify via Twilio's API
-			var body = 'To=' + config.to;
-				body += '&From=' + config.from;
-				body += '&Body=Server down (' + server.name + ')';
-			var length = Buffer.byteLength(encodeURIComponent(body));
-			var options = {
-				headers: {
-					'Authorization': 'Basic ' + new Buffer(config.user + ':' + config.pass).toString('base64'),
-					'Content-Length': length
-				},
-				hostname: 'api.twilio.com',
-				port: 443,
-				path: '/2010-04-01/Accounts/' + config.user + '/Messages.json',
-				method: 'POST'
-			};
-			var req = https.request(options, function(res) {
-				if (res.statusCode === 200) {
-					console.log('Server down: Admin notified!');
-				} else {
-					console.log('Received strange response from API: ' + res.statusCode);
-				}
-			});
-			req.on('error', function(e) {
-				console.log('Error sending request: ' + e.message);
-			});
-			req.write( encodeURIComponent(body) );
-			return true;
+		create: function( config ) {
+			if (typeof(options) === 'undefined') return false;
+			return new $classes.Notifier(config);
 		},
 		util: {
 			base64: {
@@ -349,8 +299,7 @@ var notifiers.push(new)
 	};
 	
 	return {
-		config: $func.config,
-		connect: $func.connect,
+		create: $func.create,
 		__test: __test
 	};
 })();
